@@ -14,9 +14,9 @@ struct MappingConfig {
   bool invert_pedals = true;
 
   int steer_abs_code = 0;     // ABS_X
-  int accel_abs_code = 1;     // ABS_Y
-  int brake_abs_code = 2;     // ABS_Z
-  int clutch_abs_code = 5;    // ABS_RZ
+  int accel_abs_code = 2;     // ABS_Z (verified Ubuntu G29)
+  int brake_abs_code = 5;     // ABS_RZ
+  int clutch_abs_code = 1;    // ABS_Y
   int hat_x_abs_code = 16;    // ABS_HAT0X
   int hat_y_abs_code = 17;    // ABS_HAT0Y
 

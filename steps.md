@@ -130,6 +130,17 @@ Move **one** control at a time. Write `code=` from `[raw]` and check the JSON fi
 | Accel / brake / clutch | `acceleratorPedal` / `brakePedal` / `clutchPedal` (released ~0, floor ~1) |
 | Face buttons, paddles, D-pad, +/− | matching bools; rotary changes `rotaryDialPosition` |
 
+Verified on this wheel (2026-09-02, `046d:c24f`):
+
+| Control | raw | conf key |
+| --- | --- | --- |
+| Steer | `ABS_X` code 0 | `steer_abs_code=0` |
+| Accelerator | `ABS_Z` code 2 | `accel_abs_code=2` |
+| Brake | `ABS_RZ` code 5 | `brake_abs_code=5` |
+| Clutch | `ABS_Y` code 1 | `clutch_abs_code=1` |
+
+Already in `config/g29_mapping.conf`. Re-run §4 after `git pull` (or edit the file on the Ubuntu box). One pedal at a time: only that JSON field should rise. Buttons still unverified.
+
 If a field never moves, go to **§5** (do not assume the binary is broken). Edit `config/g29_mapping.conf` and re-run — compose mounts that file, no image rebuild.
 
 - Full lock ~±450 → leave `steering_range_deg=900`
