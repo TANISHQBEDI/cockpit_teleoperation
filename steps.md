@@ -68,12 +68,48 @@ Host: `./build/g29_reader --list-devices`
 **Pass:** a line with `vendor=046d product=c24f` and `/dev/input/eventN`  
 **Fail (empty in Docker):** drop Docker; use `./build/g29_reader` for the rest.
 
-Optional once per machine:
+### 3b. Permission denied / empty `--list-devices` over SSH
+
+`lsusb` seeing `046d:c24f` only means USB enumerated. Reading the wheel needs `/dev/input/event*`, which is `root:input` mode `0660`. Your login user is often **not** in `input`. On some Ubuntu images `/dev/input` itself is `750`, so you cannot even `ls` it.
+
+On the **SSH host** (not inside Docker):
 
 ```bash
+# kernel still lists it without the input group
+grep -A8 -i -e g29 -e c24f /proc/bus/input/devices
+
+ls -ld /dev/input
+groups
+getent group input
+```
+
+**Today (no logout):** use root for the reader.
+
+```bash
+# host binary
+sudo ./build/g29_reader --list-devices
+sudo ./build/g29_reader --device auto --dump-caps
+sudo ./build/g29_reader --device auto --print-raw --rate 10 --json-stdout
+
+# Docker — container is root, but it still needs the host nodes bound in
+sudo docker compose run --rm --device /dev/input:/dev/input \
+  g29-reader --list-devices
+```
+
+**Forever (this user):**
+
+```bash
+sudo usermod -aG input "$USER"
 sudo cp udev/99-logitech-g29.rules /etc/udev/rules.d/
 sudo udevadm control --reload-rules && sudo udevadm trigger
 ```
+
+Then **exit SSH and log in again**. `groups` must show `input`. `newgrp input` is not enough for every later terminal.
+
+Optional: `sudo -- docker compose ... --group-add $(getent group input | cut -d: -f3)` if you run the container as a non-root user.
+
+**Pass:** `--list-devices` prints the G29 with `open=ok` (after you rebuild) or `sudo` can `--dump-caps`.  
+**Fail:** `lsusb` has the wheel but `grep G29 /proc/bus/input/devices` is empty → not a permission issue; try another USB port / unplug-replug.
 
 ### 4. Calibrate (10 Hz)
 

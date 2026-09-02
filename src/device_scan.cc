@@ -37,6 +37,29 @@ std::string EventPathFromHandlers(const std::string& handlers) {
   return {};
 }
 
+void PrintPermissionHint() {
+  std::cerr << "[g29_reader] input nodes are group 'input' (mode 0660). "
+               "This user cannot open /dev/input/event*.\n"
+            << "  today:    sudo ./build/g29_reader --list-devices\n"
+            << "            sudo docker compose run --rm "
+               "--device /dev/input:/dev/input g29-reader --list-devices\n"
+            << "  forever:  sudo usermod -aG input \"$USER\"\n"
+            << "            then exit SSH and log in again (newgrp is not enough "
+               "for every session).\n";
+}
+
+bool CanOpenEventNode(const std::string& path) {
+  if (path.empty()) {
+    return false;
+  }
+  const int fd = open(path.c_str(), O_RDONLY | O_NONBLOCK);
+  if (fd < 0) {
+    return false;
+  }
+  close(fd);
+  return true;
+}
+
 }  // namespace
 
 std::vector<InputDeviceInfo> ScanInputDevices() {
@@ -95,19 +118,25 @@ std::vector<InputDeviceInfo> ScanInputDevices() {
 std::string FindG29EventPath() {
   namespace fs = std::filesystem;
   const fs::path by_id{"/dev/input/by-id"};
-  if (fs::exists(by_id)) {
-    for (const auto& entry : fs::directory_iterator(by_id)) {
-      const std::string name = entry.path().filename().string();
-      const std::string lower = ToLower(name);
-      if (lower.find("g29") != std::string::npos &&
-          lower.find("event-joystick") != std::string::npos) {
-        return fs::canonical(entry.path()).string();
-      }
-      if (lower.find("driving_force_racing_wheel") != std::string::npos &&
-          lower.find("event-joystick") != std::string::npos) {
-        return fs::canonical(entry.path()).string();
+  try {
+    if (fs::exists(by_id)) {
+      for (const auto& entry : fs::directory_iterator(by_id)) {
+        const std::string name = entry.path().filename().string();
+        const std::string lower = ToLower(name);
+        if (lower.find("g29") != std::string::npos &&
+            lower.find("event-joystick") != std::string::npos) {
+          return fs::canonical(entry.path()).string();
+        }
+        if (lower.find("driving_force_racing_wheel") != std::string::npos &&
+            lower.find("event-joystick") != std::string::npos) {
+          return fs::canonical(entry.path()).string();
+        }
       }
     }
+  } catch (const fs::filesystem_error& e) {
+    std::cerr << "[g29_reader] cannot scan /dev/input/by-id: " << e.what()
+              << "\n";
+    PrintPermissionHint();
   }
 
   bool saw_ps4 = false;
@@ -128,15 +157,41 @@ std::string FindG29EventPath() {
 
 void PrintDeviceList() {
   std::cerr << "[g29_reader] input devices:\n";
+  if (access("/proc/bus/input/devices", R_OK) != 0) {
+    std::cerr << "  cannot read /proc/bus/input/devices: " << strerror(errno)
+              << "\n";
+  }
+  if (access("/dev/input", R_OK | X_OK) != 0) {
+    std::cerr << "  cannot list /dev/input: " << strerror(errno) << "\n";
+    PrintPermissionHint();
+  }
+
   const auto devices = ScanInputDevices();
   if (devices.empty()) {
-    std::cerr << "  (none — /proc/bus/input/devices missing or empty; "
-                 "expected inside a Linux container/host)\n";
+    std::cerr << "  (none parsed from /proc/bus/input/devices)\n"
+              << "  host check: grep -A8 -i g29 /proc/bus/input/devices\n";
+    if (access("/dev/input", R_OK | X_OK) != 0) {
+      PrintPermissionHint();
+    }
     return;
   }
+
+  bool saw_g29 = false;
+  bool g29_unreadable = false;
   for (const auto& d : devices) {
+    const bool ok = CanOpenEventNode(d.event_path);
     std::cerr << "  " << d.event_path << "  vendor=" << d.vendor
-              << " product=" << d.product << "  " << d.name << "\n";
+              << " product=" << d.product << "  " << d.name << "  "
+              << (ok ? "open=ok" : "open=DENIED") << "\n";
+    if (d.vendor == "046d" && (d.product == "c24f" || d.product == "c260")) {
+      saw_g29 = true;
+      if (!ok) {
+        g29_unreadable = true;
+      }
+    }
+  }
+  if (saw_g29 && g29_unreadable) {
+    PrintPermissionHint();
   }
 }
 
