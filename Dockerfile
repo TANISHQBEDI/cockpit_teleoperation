@@ -19,6 +19,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       g++-10 \
       pkg-config \
       libevdev-dev \
+      libmosquitto-dev \
       evtest \
       udev \
     && rm -rf /var/lib/apt/lists/*

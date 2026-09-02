@@ -13,6 +13,7 @@ add_compile_options(-Wall -Wextra -Wpedantic)
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(LIBEVDEV REQUIRED libevdev)
+pkg_check_modules(MOSQUITTO REQUIRED libmosquitto)
 find_package(Threads REQUIRED)
 
 add_executable(g29_reader
@@ -28,10 +29,18 @@ add_executable(g29_reader
 target_include_directories(g29_reader PRIVATE
   ${CMAKE_SOURCE_DIR}/include
   ${LIBEVDEV_INCLUDE_DIRS}
+  ${MOSQUITTO_INCLUDE_DIRS}
 )
 
-target_link_libraries(g29_reader PRIVATE ${LIBEVDEV_LIBRARIES} Threads::Threads)
-target_compile_options(g29_reader PRIVATE ${LIBEVDEV_CFLAGS_OTHER})
+target_link_libraries(g29_reader PRIVATE
+  ${LIBEVDEV_LIBRARIES}
+  ${MOSQUITTO_LIBRARIES}
+  Threads::Threads
+)
+target_compile_options(g29_reader PRIVATE
+  ${LIBEVDEV_CFLAGS_OTHER}
+  ${MOSQUITTO_CFLAGS_OTHER}
+)
 
 install(TARGETS g29_reader RUNTIME DESTINATION bin)
 install(FILES config/g29_mapping.conf DESTINATION share/cs_g29_reader)

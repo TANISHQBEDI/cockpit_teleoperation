@@ -36,6 +36,9 @@ void PrintUsage(const char* argv0) {
       << "  --print-raw            Dump evdev type/code/name/value on stderr\n"
       << "  --dump-caps            Print kernel axis/button codes and exit\n"
       << "  --list-devices         Print /proc/bus/input/devices and exit\n"
+      << "  --broker URI           Existing broker (default: config/MQTT_BROKER)\n"
+      << "  --topic TOPIC          Publish topic (default: config mqtt_topic)\n"
+      << "  --mqtt-off             Do not connect (stub, Step 1 behaviour)\n"
       << "  --help\n";
 }
 
@@ -53,6 +56,9 @@ int main(int argc, char** argv) {
   double duration_sec = 0.0;
   std::string device = "auto";
   std::string config_path;
+  std::string broker_override;
+  std::string topic_override;
+  bool mqtt_off = false;
 
   for (int i = 1; i < argc; ++i) {
     const std::string arg = argv[i];
@@ -87,6 +93,12 @@ int main(int argc, char** argv) {
       rate_hz = std::stoi(need("--rate"));
     } else if (arg == "--duration") {
       duration_sec = std::stod(need("--duration"));
+    } else if (arg == "--broker") {
+      broker_override = need("--broker");
+    } else if (arg == "--topic") {
+      topic_override = need("--topic");
+    } else if (arg == "--mqtt-off") {
+      mqtt_off = true;
     } else {
       std::cerr << "[g29_reader] unknown argument: " << arg << "\n";
       PrintUsage(argv[0]);
@@ -102,7 +114,30 @@ int main(int argc, char** argv) {
   signal(SIGINT, OnSignal);
   signal(SIGTERM, OnSignal);
 
-  const auto mapping = cockpit::LoadMappingConfig(config_path);
+  auto mapping = cockpit::LoadMappingConfig(config_path);
+  if (const char* env = std::getenv("MQTT_BROKER")) {
+    mapping.mqtt_broker = env;
+  }
+  if (const char* env = std::getenv("MQTT_TOPIC")) {
+    mapping.mqtt_topic = env;
+  }
+  if (const char* env = std::getenv("MQTT_USERNAME")) {
+    mapping.mqtt_username = env;
+  }
+  if (const char* env = std::getenv("MQTT_PASSWORD")) {
+    mapping.mqtt_password = env;
+  }
+  if (!broker_override.empty()) {
+    mapping.mqtt_broker = broker_override;
+  }
+  if (!topic_override.empty()) {
+    mapping.mqtt_topic = topic_override;
+  }
+  if (mapping.mqtt_broker.rfind("mqtts://", 0) == 0 ||
+      mapping.mqtt_broker.rfind("ssl://", 0) == 0) {
+    std::cerr << "[g29_reader] TLS (mqtts/ssl) is not wired yet; "
+                 "use tcp://host:port\n";
+  }
 
   auto resolve_device = [&]() -> std::string {
     if (device != "auto") {
@@ -131,12 +166,22 @@ int main(int argc, char** argv) {
   }
 
   cockpit::CommandSerializer serializer(mapping.identity);
-  cockpit::StubMqttPublisher mqtt(mapping.mqtt_broker);
+  std::unique_ptr<cockpit::MqttPublisher> mqtt;
+  if (mqtt_off) {
+    mqtt = std::make_unique<cockpit::StubMqttPublisher>(mapping.mqtt_broker);
+    std::cerr << "[g29_reader] mqtt=STUB\n";
+  } else {
+    const std::string client_id =
+        "cs-g29-" + mapping.identity.serial_number;
+    mqtt = std::make_unique<cockpit::MosquittoMqttPublisher>(
+        mapping.mqtt_broker, client_id, mapping.mqtt_username,
+        mapping.mqtt_password);
+  }
 
   std::unique_ptr<cockpit::InputSource> source;
   if (mock) {
-    std::cerr << "[g29_reader] source=mock  mqtt=STUB (not connected) broker="
-              << mapping.mqtt_broker << " topic=" << mapping.mqtt_topic << "\n";
+    std::cerr << "[g29_reader] source=mock  broker=" << mapping.mqtt_broker
+              << " topic=" << mapping.mqtt_topic << "\n";
     source = std::make_unique<cockpit::MockReader>(mapping);
   } else {
     device = resolve_device();
@@ -144,7 +189,7 @@ int main(int argc, char** argv) {
       return 1;
     }
     std::cerr << "[g29_reader] source=evdev path=" << device
-              << " mqtt=STUB (not connected) broker=" << mapping.mqtt_broker
+              << " broker=" << mapping.mqtt_broker
               << " topic=" << mapping.mqtt_topic << "\n";
     source = std::make_unique<cockpit::EvdevReader>(device, mapping, print_raw);
   }
@@ -197,7 +242,7 @@ int main(int argc, char** argv) {
       if (json_stdout) {
         std::cout << json << '\n' << std::flush;
       }
-      mqtt.Publish(mapping.mqtt_topic, json);
+      mqtt->Publish(mapping.mqtt_topic, json);
       ++emitted;
       ++window_emitted;
       if (pretty && clock::now() >= pretty_at) {
@@ -220,8 +265,8 @@ int main(int argc, char** argv) {
       std::cerr << "[g29_reader] rate=" << window_emitted << " Hz"
                 << " emitted=" << emitted << " blocked=" << blocked
                 << " overruns=" << overruns
-                << " mqtt_stub=" << mqtt.published_count()
-                << " mqtt_connected=" << (mqtt.connected() ? "true" : "false")
+                << " mqtt_pub=" << mqtt->published_count()
+                << " mqtt_connected=" << (mqtt->connected() ? "true" : "false")
                 << " steer=" << state.steering_angle_deg << " deg"
                 << " accel=" << state.accelerator_pedal;
       if (!state.block_reason.empty()) {
@@ -238,6 +283,8 @@ int main(int argc, char** argv) {
   }
   std::cerr << "[g29_reader] stop emitted=" << emitted << " blocked=" << blocked
             << " overruns=" << overruns
-            << " mqtt_stub=" << mqtt.published_count() << "\n";
+            << " mqtt_pub=" << mqtt->published_count()
+            << " mqtt_connected=" << (mqtt->connected() ? "true" : "false")
+            << "\n";
   return 0;
 }

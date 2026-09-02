@@ -1,0 +1,3 @@
+# Subscriber only (scripts/mqtt_watch.py). Not used by the C++ publisher.
+# paho-mqtt: Eclipse client, MQTT 3.1.1/5, any broker. Alternative: gmqtt (async).
+paho-mqtt>=1.6.1,<3

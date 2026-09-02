@@ -110,6 +110,10 @@ MappingConfig LoadMappingConfig(const std::string& path) {
       cfg.mqtt_topic = value;
     } else if (key == "mqtt_broker") {
       cfg.mqtt_broker = value;
+    } else if (key == "mqtt_username") {
+      cfg.mqtt_username = value;
+    } else if (key == "mqtt_password") {
+      cfg.mqtt_password = value;
     } else {
       std::cerr << "[g29_reader] " << path << ":" << line_no
                 << ": unknown key '" << key << "'\n";

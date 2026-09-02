@@ -39,6 +39,8 @@ struct MappingConfig {
 
   std::string mqtt_topic = "uagv/v2/ANSCER/AR001/command";
   std::string mqtt_broker = "tcp://127.0.0.1:1883";
+  std::string mqtt_username;
+  std::string mqtt_password;
 };
 
 // Loads key=value config. Missing file → defaults. Unknown keys are ignored

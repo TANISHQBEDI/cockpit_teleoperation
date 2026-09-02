@@ -2,9 +2,11 @@
 
 Do **only the current stage**. Later stages are added here when that code exists.
 
-**Current stage: 1 — G29 → `command.json` (MQTT stub, not connected)**
+**Current stage: 2 — publish `command.json` to the existing site MQTT broker**
 
-Not in this stage: real MQTT, ROS, MANUAL / video / E-stop interlocks, haptics, path projection.
+No broker is started here. Point `mqtt_broker` / `--broker` at the FMS bus you already have.
+
+Not in this stage: ROS, MANUAL / video / E-stop interlocks, haptics, path projection, TLS.
 
 ---
 
@@ -261,8 +263,84 @@ head -n 1 /tmp/command.ndjson
 
 ---
 
+---
+
+## Stage 2 — existing central MQTT / VDA 5050 bus
+
+The bus is **MQTT the protocol**. HiveMQ, EMQX, Mosquitto, or the ANSCER FMS broker are all fine. `libmosquitto` in `g29_reader` is only the C **client** library (Ubuntu 20.04 apt). We do not start a broker.
+
+`command.json` is an ANSCER teleop topic. Stock VDA 5050 uses `order` / `instantActions` / `state` / `visualization`. Header + camelCase match VDA; the body is ours. Default topic: `uagv/v2/ANSCER/AR001/command` (`interface/major/manufacturer/serial/topic`). Change `--topic` if FMS uses another name.
+
+Set the broker once. Pick **one**:
+
+```bash
+# config (compose mounts this file)
+# mqtt_broker=tcp://BROKER_HOST:1883
+# mqtt_topic=uagv/v2/ANSCER/AR001/command
+
+# or CLI
+--broker tcp://BROKER_HOST:1883
+
+# or env
+export MQTT_BROKER=tcp://BROKER_HOST:1883
+# optional: MQTT_USERNAME  MQTT_PASSWORD  MQTT_TOPIC
+```
+
+Rebuild so `libmosquitto` is linked (`docker compose build` or `cmake --build build -j`). Host also needs `sudo apt-get install -y libmosquitto-dev`.
+
+### 1. Connect + publish (Ubuntu, real G29)
+
+```bash
+sudo ./build/g29_reader --device auto --config config/g29_mapping.conf \
+  --broker tcp://BROKER_HOST:1883 --rate 500 --duration 5
+```
+
+Docker (broker must be reachable from the container — use the LAN IP, not `127.0.0.1` unless the broker is in the same container network):
+
+```bash
+sudo docker compose run --rm --device /dev/input:/dev/input g29-reader \
+  --device auto --broker tcp://BROKER_HOST:1883 --rate 500 --duration 5
+```
+
+**Pass:** stderr `mqtt connected HOST:PORT`, then `mqtt_connected=true` and `mqtt_pub` near `emitted` (~2500 in 5 s).  
+**Fail:** `mqtt connected` never appears → wrong host/port, firewall, or auth. Set `mqtt_username` / `mqtt_password` if the bus requires it. `--mqtt-off` is the old stub.
+
+### 2. Watch the bus (Ubuntu host **or** this Mac / PC)
+
+Any machine that can reach the broker. Python 3 + Paho (not Mosquitto-specific):
+
+```bash
+cd cockpit_teleoperation
+python3 -m venv .venv
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
+pip install -r scripts/requirements-mqtt.txt
+
+python3 scripts/mqtt_watch.py --host BROKER_HOST --port 1883 --pretty --max-messages 5
+```
+
+Keep it running (no `--max-messages`) while `g29_reader` publishes; move the wheel. `--pretty` is for reading; drop it if you only want the Hz counter on stderr.
+
+Same via env: `MQTT_BROKER=tcp://BROKER_HOST:1883 python3 scripts/mqtt_watch.py --pretty`
+
+If FMS uses another topic: `--topic 'uagv/v2/+/+/command'` or the name they give you.
+
+**Pass:** script prints `connected`, then `command.json`; `steeringAngleDeg` changes when the wheel moves.  
+**Fail:** `cannot reach` → VPN / firewall / wrong host. Connects but zero messages → topic mismatch or reader not publishing (`mqtt_connected=true`).
+
+### 3. Mac reader (optional)
+
+`--mock --broker tcp://BROKER_HOST:1883` if this Mac can route to the bus. Prefer publishing from the Ubuntu CS.
+
+### Stage 2 done when
+
+- [ ] `g29_reader` prints `mqtt connected` to the site broker
+- [ ] `scripts/mqtt_watch.py` on Ubuntu or your PC shows `command.json`
+- [ ] `mqtt_pub` ≈ `emitted` at 500 Hz
+- [ ] `mqtt_broker` / topic saved in `config/g29_mapping.conf`
+
+---
+
 ## Later (not written yet)
 
-2. MQTT publish of the same JSON  
 3. ROS 1 Noetic subscriber  
 4. `feedback.json` + remaining interlocks

@@ -1,6 +1,6 @@
 # CS G29 reader (Step 1)
 
-Control Station process that reads a Logitech G29 and emits the ANSCER `command.json` snapshot at 500 Hz. **MQTT is a disconnected stub in this step.** Real broker publish is Step 2.
+Control Station process that reads a Logitech G29 and publishes ANSCER `command.json` at 500 Hz to the **existing** site MQTT broker. We do not run a broker in this repo.
 
 Pipeline this repo will grow into:
 
@@ -61,7 +61,7 @@ The reader is a **standalone binary**. It does not link ROS. Step 3 (ROS test) c
 | Boost.MQTT5 | Modern C++20 / Asio | Boost; MQTT 5 only |
 | redboltz `mqtt_cpp` | Header-only, 3.1.1 + 5 | Less common in AMRs |
 
-Recommendation for Step 2: **Paho C++** + **Eclipse Mosquitto** broker in Compose. QoS 0 for the 500 Hz stream (QoS 1 will backpressure). `command.json` is an **ANSCER teleop topic**, not a stock VDA 5050 `order` / `instantActions` / `state` message. Only the header/camelCase follow VDA 5050. Default topic: `uagv/v2/ANSCER/AR001/command`.
+**Chosen client: libmosquitto** (Ubuntu 20.04 `libmosquitto-dev`). QoS 0. Point `mqtt_broker` / `--broker` at the FMS bus. `command.json` is an ANSCER teleop topic, not stock VDA 5050 `order` / `state`. Default topic: `uagv/v2/ANSCER/AR001/command`.
 
 ## Build and run (Mac — mock)
 
@@ -126,7 +126,7 @@ Pedals default to **inverted** (kernel 0 = pressed → JSON 1.0). H-shifter is a
 
 ## Next steps (do not start until this mock run looks right)
 
-2. MQTT: Paho publish of the same JSON at 500 Hz, Mosquitto in Compose, QoS 0.
+2. MQTT client → existing site broker (QoS 0).
 3. ROS 1 Noetic subscriber check on Ubuntu.
 4. `feedback.json` + remaining interlocks.
 5. Path projection from `velocity`.
