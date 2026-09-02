@@ -1,0 +1,11 @@
+# Logitech G29 — PC / PS3 mode (046d:c24f)
+# Install on the Ubuntu Control Station (not needed inside Docker if you
+# pass --device /dev/input):
+#   sudo cp udev/99-logitech-g29.rules /etc/udev/rules.d/
+#   sudo udevadm control --reload-rules && sudo udevadm trigger
+#
+# Stable node: /dev/input/g29-event
+KERNEL=="event*", SUBSYSTEM=="input", ATTRS{idVendor}=="046d", ATTRS{idProduct}=="c24f", MODE="0660", GROUP="input", SYMLINK+="input/g29-event"
+
+# PS4 mode is the wrong switch position for hid-lg4ff / this reader.
+KERNEL=="event*", SUBSYSTEM=="input", ATTRS{idVendor}=="046d", ATTRS{idProduct}=="c260", RUN+="/bin/sh -c 'logger -t g29_reader G29 is in PS4 mode; flip switch to PS3/PC'"

@@ -1,0 +1,22 @@
+# Control Station G29 reader
+# Mac: `docker compose up` runs the mock source (no USB HID passthrough).
+# Ubuntu: see README — pass /dev/input and drop --mock.
+services:
+  g29-reader:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: cs-g29-reader:local
+    container_name: cs-g29-reader
+    # stdin_open/tty so Ctrl+C stops the 500 Hz loop cleanly.
+    stdin_open: true
+    tty: true
+    # Uncomment on Ubuntu when the G29 is plugged in (ignored on Docker Desktop Mac):
+    # devices:
+    #   - /dev/input:/dev/input
+    # group_add:
+    #   - "988"  # host `getent group input` — often 988 or 107
+    # Live mapping file so Ubuntu calibration does not require an image rebuild.
+    volumes:
+      - ./config/g29_mapping.conf:/etc/cs_g29_reader/g29_mapping.conf:ro
+    command: ["--mock", "--config", "/etc/cs_g29_reader/g29_mapping.conf"]

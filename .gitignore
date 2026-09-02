@@ -1,0 +1,9 @@
+build/
+out/
+.cache/
+cmake-build-*/
+*.ndjson
+*.o
+*.a
+.DS_Store
+.env

@@ -1,0 +1,9 @@
+.git
+.gitignore
+build
+out
+.cache
+*.ndjson
+.DS_Store
+README.md
+AGENTS.md

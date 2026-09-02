@@ -1,0 +1,13 @@
+## Dev environment tips
+- Ideally this software should run on any device so docker containering is a good way to go
+- For C++ use Modern C++ like >=20
+- Use G++ for C/C++ compilation
+- For python use .ven if running outside of docker container
+- For setting up docker containers use LTS versions
+- Name the project respectively and make setup files for docker if being used with appropriate comments
+- Before making any decision make sure to ask questions so that no thing is assumed to be a fact
+- If there are limitations, give a proper appropriate table giving alternate options
+- Research similar content before giving any answer.
+- For styling use Google styling guide for both C/C++ and Python
+- We are using MQTT here so for any kind of package installation give options and what are the advantages and disadvantes of each if multiple of the same are available
+- Avoid using Python if C/C++ can be used for higher performance
