@@ -117,10 +117,12 @@ Optional: `sudo -- docker compose ... --group-add $(getent group input | cut -d:
 docker compose run --rm --device /dev/input:/dev/input g29-reader \
   --device auto \
   --config /etc/cs_g29_reader/g29_mapping.conf \
-  --print-raw --rate 10 --json-stdout
+  --print-raw --pretty --rate 10
 ```
 
-Host: `./build/g29_reader --device auto --config config/g29_mapping.conf --print-raw --rate 10 --json-stdout`
+Host: `./build/g29_reader --device auto --config config/g29_mapping.conf --print-raw --pretty --rate 10`
+
+`--pretty` prints indented JSON on stderr (same stream as `[raw]`, flushed every 250 ms) so it does not lag behind raw events. Add `--json-stdout` only when capturing compact one-line JSON.
 
 Move **one** control at a time. Write `code=` from `[raw]` and check the JSON field.
 

@@ -1,4 +1,5 @@
 #include <signal.h>
+#include <unistd.h>
 
 #include <chrono>
 #include <cstdint>
@@ -30,7 +31,8 @@ void PrintUsage(const char* argv0) {
       << "  --config PATH          Mapping file (default: built-in)\n"
       << "  --rate HZ              Snapshot rate (default: 500)\n"
       << "  --duration SEC         Exit after N seconds (0 = forever)\n"
-      << "  --json-stdout          Write one command.json per tick to stdout\n"
+      << "  --json-stdout          Compact command.json per tick on stdout\n"
+      << "  --pretty               Indented JSON on stderr (watch in the terminal)\n"
       << "  --print-raw            Dump evdev type/code/name/value on stderr\n"
       << "  --dump-caps            Print kernel axis/button codes and exit\n"
       << "  --list-devices         Print /proc/bus/input/devices and exit\n"
@@ -45,6 +47,7 @@ int main(int argc, char** argv) {
   bool mock = false;
   bool json_stdout = false;
   bool print_raw = false;
+  bool pretty = false;
   bool dump_caps = false;
   int rate_hz = 500;
   double duration_sec = 0.0;
@@ -66,6 +69,8 @@ int main(int argc, char** argv) {
       json_stdout = true;
     } else if (arg == "--print-raw") {
       print_raw = true;
+    } else if (arg == "--pretty") {
+      pretty = true;
     } else if (arg == "--dump-caps") {
       dump_caps = true;
     } else if (arg == "--list-devices") {
@@ -144,12 +149,25 @@ int main(int argc, char** argv) {
     source = std::make_unique<cockpit::EvdevReader>(device, mapping, print_raw);
   }
 
-  std::ios::sync_with_stdio(false);
+  const bool tty = isatty(STDERR_FILENO) == 1;
+  if (!pretty && tty && (print_raw || json_stdout) && rate_hz <= 25) {
+    pretty = true;
+  }
+  // Line-buffering off is for 500 Hz capture. Keep it for that path only;
+  // otherwise stdout sits in a buffer and JSON appears late vs [raw].
+  if (!pretty && !print_raw) {
+    std::ios::sync_with_stdio(false);
+  }
+  if (pretty) {
+    std::cerr << "[g29_reader] pretty JSON on stderr every 250 ms "
+                 "(same stream as [raw])\n";
+  }
 
   const auto period = std::chrono::nanoseconds(1'000'000'000 / rate_hz);
   auto next = clock::now();
   const auto t0 = next;
   auto stats_at = t0 + std::chrono::seconds(1);
+  auto pretty_at = t0;
 
   std::uint32_t header_id = 1;
   std::uint64_t emitted = 0;
@@ -177,11 +195,16 @@ int main(int argc, char** argv) {
     } else {
       const auto json = serializer.Serialize(state, header_id++);
       if (json_stdout) {
-        std::cout << json << '\n';
+        std::cout << json << '\n' << std::flush;
       }
       mqtt.Publish(mapping.mqtt_topic, json);
       ++emitted;
       ++window_emitted;
+      if (pretty && clock::now() >= pretty_at) {
+        std::cerr << serializer.SerializePretty(state, header_id - 1)
+                  << std::flush;
+        pretty_at = clock::now() + std::chrono::milliseconds(250);
+      }
     }
 
     next += period;
